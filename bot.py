@@ -1,60 +1,39 @@
-import os
 import asyncio
-import pytz
-from datetime import datetime
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 from flask import Flask
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 
-# Фейковый сервер, чтобы Render не завершал процесс
-app_web = Flask(__name__)
+import os
 
-@app_web.route('/')
-def home():
-    return "Bot is running ✅"
-
-# Запуск Flask-сервера
-def run_web():
-    app_web.run(host="0.0.0.0", port=10000)
-
-# Telegram токен
 TOKEN = os.getenv("TOKEN")
 
-# Часовой пояс Ташкент
-tz = pytz.timezone("Asia/Tashkent")
+app = Flask(__name__)
 
-async def auto_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    now = datetime.now(tz)
-    hour = now.hour
+@app.route("/")
+def home():
+    return "Bot is running successfully!"
 
-    if 10 <= hour < 21:
-        reply_text = (
-            "👋 Assalomu Aleykum Hurmatli mijoz 😊, "
-            "Siz Arzon.Gadjet ga murojaat qildingiz, sizga tez orada javob beramiz 💬\n"
-            "➖➖➖\n"
-            "👋 Здравствуйте! Спасибо за сообщение 😊\n"
-            "Мы сейчас на связи и ответим вам в ближайшее время 💬"
-        )
-    else:
-        reply_text = (
-            "👋 Assalomu Aleykum Hurmatli mijoz 😊, "
-            "Siz Arzon.Gadjet ga murojaat qildingiz, Afsus bizning ish vaqtimiz tugadi 😮‍💨,\n"
-            "⏰ Soat 10:00 dan 21:00 gacha aloqadamiz. Agar savolingiz bo'lsa qoldiring biz albatta javob beramiz 😊\n"
-            "➖➖➖\n"
-            "🌙 Добрый вечер!\n"
-            "Наш график: с 10:00 до 21:00 🕙\n"
-            "Сейчас мы уже не работаем, но обязательно ответим вам утром 💬"
-        )
+async def start(update, context):
+    await update.message.reply_text("Привет! Бот запущен и готов отвечать 😊")
 
-    await update.message.reply_text(reply_text)
+async def echo(update, context):
+    await update.message.reply_text(update.message.text)
 
 async def run_bot():
-    app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, auto_reply))
-    print("🤖 Bot started successfully!")
-    await app.run_polling()
+    tg_app = ApplicationBuilder().token(TOKEN).build()
+    tg_app.add_handler(CommandHandler("start", start))
+    tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+
+    print("🤖 Bot started polling...")
+    await tg_app.initialize()
+    await tg_app.start()
+    await tg_app.updater.start_polling()
+    await asyncio.Event().wait()  # Держим бота запущенным бесконечно
 
 if __name__ == "__main__":
     import threading
-    threading.Thread(target=run_web).start()
-    asyncio.run(run_bot())
+
+    # Запускаем Telegram-бот в отдельном потоке
+    threading.Thread(target=lambda: asyncio.run(run_bot()), daemon=True).start()
+
+    # Запускаем Flask-сервер для Render
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
